@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Storage &amp; Ancillary &middot; Atlas</title>
+<link rel="stylesheet" href="assets/atlas.css">
+</head>
+<body>
+<div class="sheet">
+  <header class="head">
+    <a class="wordmark" href="index.html">Atlas</a>
+    <nav>
+      <a href="power.html">I &nbsp;Wholesale &amp; Capture</a>
+      <a href="storage.html" aria-current="page">II &nbsp;Storage &amp; Ancillary</a>
+    </nav>
+    <div class="issued" id="issued"></div>
+  </header>
+
+  <div class="notice warn" id="demo" hidden>
+    <span class="label">Demo data</span>
+    <p>These figures are invented, not market data. They exist so the pages can be
+    checked before the ENTSO-E token is in place. The first real collection run
+    deletes them and begins the record again.</p>
+  </div>
+
+  <div class="notice" id="fault" hidden>
+    <span class="label">Nothing to show yet</span>
+    <p></p>
+  </div>
+
+  <section class="plate" id="p1" hidden>
+    <header>
+      <h2><em>Plate I</em>Arbitrage revenue</h2>
+      <div class="tools" id="arbTools"></div>
+    </header>
+    <p class="caption">What a one megawatt, two hour battery would have earned trading
+    each day's curve with perfect foresight, at eighty-five per cent round trip and a
+    limit of two cycles, starting and finishing empty. An upper bound on day-ahead
+    arbitrage alone.</p>
+    <svg class="chart" id="arbChart" viewBox="0 0 1000 330" preserveAspectRatio="xMidYMid meet" role="img"></svg>
+    <div class="keys" id="arbKeys"></div>
+  </section>
+
+  <section class="plate" id="p2" hidden>
+    <header>
+      <h2><em>Plate II</em>Dispatch</h2>
+      <div class="stepper">
+        <button type="button" id="earlier">Earlier</button>
+        <strong id="dayLabel"></strong>
+        <button type="button" id="later">Later</button>
+      </div>
+    </header>
+    <p class="caption">The same price strips, marked with the hours the optimiser
+    charged and discharged.</p>
+    <div class="scale"><div></div><div class="ticks" id="ticks"></div><div></div></div>
+    <div class="strips" id="strips"></div>
+    <div class="key">
+      <span class="ramp" id="ramp"></span><span id="rampNote"></span>
+      <span><i class="pip c"></i>Charging</span>
+      <span><i class="pip d"></i>Discharging</span>
+    </div>
+  </section>
+
+  <section class="plate" id="p3" hidden>
+    <header><h2><em>Plate III</em>Resolution premium</h2></header>
+    <p class="caption">European day-ahead markets moved from hourly to quarter-hourly
+    market time units on 1 October 2025, Switzerland excepted until November 2026.
+    This compares the same dispatch run at the resolution the market clears in against
+    the same day averaged to hours, which is the difference between trading the
+    intra-hour shape and trading through it.</p>
+    <div class="scroll"><table>
+      <thead><tr>
+        <th>Market</th><th>Resolution</th><th>At market resolution</th>
+        <th>Hourly equivalent</th><th>Premium</th><th>Cycles</th>
+        <th>Range</th><th>Top 2h less bottom 2h</th><th>Volatility</th><th>Negative hours</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+  </section>
+
+  <section class="plate" id="p4" hidden>
+    <header>
+      <h2><em>Plate IV</em>Ancillary capacity</h2>
+      <div class="issued" id="ancNote"></div>
+    </header>
+    <p class="caption">Procured balancing capacity prices, where the transmission
+    operator publishes them. Shown alongside wholesale arbitrage in the same units,
+    so the revenue stack can be read as one picture rather than three.</p>
+    <div id="ancBody"></div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+<script src="assets/atlas.js"></script>
+<script>
+Atlas.load().then((r) => {
+  if (!r.ok) return Atlas.fault(r.reason);
+  ["p1","p2","p3","p4"].forEach((id) => Atlas.$(id).hidden = false);
+
+  Atlas.trend({
+    svg: "arbChart", keys: "arbKeys", tools: "arbTools", days: 540,
+    metrics: [
+      { field: "arb_revenue",        label: "Arbitrage revenue", dp: 0 },
+      { field: "arb_revenue_hourly", label: "Hourly equivalent", dp: 0 },
+      { field: "spread",             label: "Daily range",       dp: 0 },
+      { field: "spread_2h",          label: "Top 2h less bottom 2h", dp: 0 },
+      { field: "volatility",         label: "Volatility",        dp: 0 },
+      { field: "cycles",             label: "Cycles",            dp: 1 },
+      { field: "negative_hours",     label: "Negative hours",    dp: 0 }
+    ]
+  });
+
+  const premium = (m) => (m.arb_revenue_hourly > 0)
+    ? (m.arb_revenue / m.arb_revenue_hourly - 1) : null;
+
+  Atlas.strips({ marks: true, onDraw: (key, day) => {
+    Atlas.table("tbody", [
+      { get: (m) => m.resolution_min + " min" },
+      { get: (m) => Atlas.num(m.arb_revenue, 0) },
+      { get: (m) => Atlas.num(m.arb_revenue_hourly, 0) },
+      { get: (m) => premium(m) === null ? "\u2014" : (premium(m) >= 0 ? "+" : "") + Atlas.pct(premium(m), 1) },
+      { get: (m) => Atlas.num(m.cycles, 2) },
+      { get: (m) => Atlas.num(m.spread, 1) },
+      { get: (m) => Atlas.num(m.spread_2h, 1) },
+      { get: (m) => Atlas.num(m.volatility, 1) },
+      { get: (m) => Atlas.num(m.negative_hours, 1), low: (m) => m.negative_hours > 0 }
+    ]);
+  }});
+
+  // ---- ancillary, which may legitimately be empty ----
+  const anc = Atlas.state.ancillary || { days: {} };
+  const ancDates = Object.keys(anc.days || {}).filter((d) => Object.keys(anc.days[d]).length).sort();
+  const box = Atlas.$("ancBody");
+
+  if (!ancDates.length) {
+    box.innerHTML = '<div class="notice"><span class="label">Not yet collected</span>' +
+      '<p>No procured balancing capacity prices have come back for these control areas. ' +
+      'Publication of this series is uneven across Europe, so this may be a genuine ' +
+      'absence rather than a fault. Check the <code>ancillary</code> section of the run ' +
+      'log: it reports how many series were stored on each run.</p></div>';
+  } else {
+    const key = ancDates[ancDates.length - 1];
+    const day = anc.days[key];
+    const reserves = anc.reserves || [];
+    Atlas.$("ancNote").textContent = Atlas.dayName(key, { day: "2-digit", month: "short", year: "numeric" });
+    box.innerHTML = '<div class="scroll"><table><thead><tr><th>Control area</th>' +
+      reserves.map((p) => `<th>${p.id} mean</th><th>${p.id} range</th>`).join("") +
+      '</tr></thead><tbody>' +
+      (anc.zones || []).filter((z) => day[z.id]).map((z) => {
+        const row = day[z.id];
+        return `<tr><td>${z.label}</td>` + reserves.map((p) => {
+          const v = row[p.id];
+          return v
+            ? `<td>${Atlas.num(v[0], 2)}</td><td>${Atlas.num(v[1], 2)} \u2013 ${Atlas.num(v[2], 2)}</td>`
+            : '<td>\u2014</td><td>\u2014</td>';
+        }).join("") + "</tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+
+  Atlas.$("footer").innerHTML =
+    "<p>Arbitrage revenue is a perfect-foresight upper bound on day-ahead trading alone. It excludes ancillary services, intraday trading, imbalance exposure, degradation, availability and every cost of operating the asset. It is a comparison of market conditions across zones and over time, not a revenue forecast.</p>" +
+    "<p>The resolution premium is sensitive to how the market is bidding rather than to anything about a particular asset, and it flatters a battery that can trade freely within the hour. Read it as an indication of how much of a revenue case depends on intra-hour execution.</p>" +
+    "<p>Ancillary figures are procured capacity prices as published by the transmission operator through the ENTSO-E platform. Units and product definitions differ between control areas and are not directly comparable without adjustment.</p>" +
+    "<p>Source: ENTSO-E Transparency Platform. Indicative figures for orientation, not a valuation input.</p>";
+});
+</script>
+</body>
+</html>

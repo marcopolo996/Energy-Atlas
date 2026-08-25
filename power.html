@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Wholesale &amp; Capture &middot; Atlas</title>
+<link rel="stylesheet" href="assets/atlas.css">
+</head>
+<body>
+<div class="sheet">
+  <header class="head">
+    <a class="wordmark" href="index.html">Atlas</a>
+    <nav>
+      <a href="power.html" aria-current="page">I &nbsp;Wholesale &amp; Capture</a>
+      <a href="storage.html">II &nbsp;Storage &amp; Ancillary</a>
+    </nav>
+    <div class="issued" id="issued"></div>
+  </header>
+
+  <div class="notice warn" id="demo" hidden>
+    <span class="label">Demo data</span>
+    <p>These figures are invented, not market data. They exist so the pages can be
+    checked before the ENTSO-E token is in place. The first real collection run
+    deletes them and begins the record again.</p>
+  </div>
+
+  <div class="notice" id="fault" hidden>
+    <span class="label">Nothing to show yet</span>
+    <p></p>
+  </div>
+
+  <section class="plate" id="p1" hidden>
+    <header>
+      <h2><em>Plate I</em>Shape of the day</h2>
+      <div class="stepper">
+        <button type="button" id="earlier">Earlier</button>
+        <strong id="dayLabel"></strong>
+        <button type="button" id="later">Later</button>
+      </div>
+    </header>
+    <p class="caption">Settled day-ahead prices by hour, one strip per bidding zone.
+    Colour follows the hypsometric convention of an elevation map, cold in the
+    troughs and warm on the peaks.</p>
+    <div class="scale"><div></div><div class="ticks" id="ticks"></div><div></div></div>
+    <div class="strips" id="strips"></div>
+    <div class="key">
+      <span class="ramp" id="ramp"></span><span id="rampNote"></span>
+    </div>
+  </section>
+
+  <section class="plate" id="p2" hidden>
+    <header>
+      <h2><em>Plate II</em>Capture rates</h2>
+      <div class="tools" id="capTools"></div>
+    </header>
+    <p class="caption">The volume-weighted price a technology actually earns, divided
+    by the simple baseload price. Below one hundred per cent means the technology is
+    generating when prices are low, which is cannibalisation as it appears in a
+    revenue line. The dashed rule marks parity with baseload.</p>
+    <svg class="chart" id="capChart" viewBox="0 0 1000 330" preserveAspectRatio="xMidYMid meet" role="img"></svg>
+    <div class="keys" id="capKeys"></div>
+  </section>
+
+  <section class="plate" id="p3" hidden>
+    <header>
+      <h2><em>Plate III</em>Settled figures</h2>
+      <div class="issued" id="tableNote"></div>
+    </header>
+    <div class="scroll"><table>
+      <thead><tr>
+        <th>Market</th><th>Base</th><th>Peak</th><th>Off-peak</th><th>Min</th><th>Max</th>
+        <th>Solar capture</th><th>Solar rate</th><th>Wind capture</th><th>Wind rate</th>
+        <th>Negative hours</th><th>Resolution</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table></div>
+  </section>
+  <footer id="footer"></footer>
+</div>
+<script src="assets/atlas.js"></script>
+<script>
+Atlas.load().then((r) => {
+  if (!r.ok) return Atlas.fault(r.reason);
+  ["p1","p2","p3"].forEach((id) => Atlas.$(id).hidden = false);
+
+  Atlas.strips({ marks: false, onDraw: (key, day) => {
+    Atlas.table("tbody", [
+      { get: (m) => Atlas.num(m.base, 1) },
+      { get: (m) => Atlas.num(m.peak, 1) },
+      { get: (m) => Atlas.num(m.offpeak, 1) },
+      { get: (m) => Atlas.num(m.min, 1) },
+      { get: (m) => Atlas.num(m.max, 1) },
+      { get: (m) => Atlas.num(m.solar_capture, 1) },
+      { get: (m) => Atlas.pct(m.solar_capture_rate) },
+      { get: (m) => Atlas.num(m.wind_capture, 1) },
+      { get: (m) => Atlas.pct(m.wind_capture_rate) },
+      { get: (m) => Atlas.num(m.negative_hours, 1), low: (m) => m.negative_hours > 0 },
+      { get: (m) => m.resolution_min + " min" }
+    ]);
+    Atlas.$("tableNote").textContent = Atlas.dayName(key, { day: "2-digit", month: "short", year: "numeric" });
+  }});
+
+  Atlas.trend({
+    svg: "capChart", keys: "capKeys", tools: "capTools", days: 540,
+    metrics: [
+      { field: "solar_capture_rate", label: "Solar, 30 day", zero: false, reference: 100, fmt: (v) => v.toFixed(0) + "%",
+        rolling: { capture: "solar_capture", volume: "solar_share", window: 30 } },
+      { field: "wind_capture_rate",  label: "Wind, 30 day",  zero: false, reference: 100, fmt: (v) => v.toFixed(0) + "%",
+        rolling: { capture: "wind_capture", volume: "wind_share", window: 30 } },
+      { field: "solar_capture_rate", label: "Solar, daily", scale: 100, dp: 0, zero: false, reference: 100, fmt: (v) => v.toFixed(0) + "%" },
+      { field: "wind_capture_rate",  label: "Wind, daily",  scale: 100, dp: 0, zero: false, reference: 100, fmt: (v) => v.toFixed(0) + "%" },
+      { field: "solar_capture",      label: "Solar capture price", dp: 0 },
+      { field: "wind_capture",       label: "Wind capture price",  dp: 0 },
+      { field: "base",               label: "Baseload",            dp: 0 },
+      { field: "negative_hours",     label: "Negative hours",      dp: 0 }
+    ]
+  });
+
+  Atlas.$("footer").innerHTML =
+    "<p>Capture price is the generation-weighted average price: the sum of price times output, divided by total output. Capture rate expresses that as a proportion of the average price over the same period.</p>" +
+    "<p>The thirty day series is the figure worth quoting. A capture rate computed day by day and then averaged understates cannibalisation, because it normalises within each day and so misses the effect that windy days are also cheap days. The thirty day series aggregates revenue and volume across the whole window before dividing, which captures both.</p>" +
+    "<p>Wind combines onshore and offshore where a zone reports both. Where a generation series is missing or does not align with the price series for a day, the figure is left blank rather than estimated.</p>" +
+    "<p>Source: ENTSO-E Transparency Platform, settled day-ahead auction and actual generation per production type. Indicative figures for orientation, not a valuation input.</p>";
+});
+</script>
+</body>
+</html>

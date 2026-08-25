@@ -1,0 +1,46 @@
+name: Update market data
+
+on:
+  schedule:
+    # Times are UTC. The first run follows the day-ahead auction, which clears
+    # around 12:45 CET, so tomorrow's prices are available. The second is a
+    # repair pass that fills anything the first run missed.
+    - cron: "15 13 * * *"
+    - cron: "15 05 * * *"
+  workflow_dispatch:        # adds a "Run workflow" button in the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: market-data
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The collector uses only the Python standard library, so there is
+      # nothing to install.
+      - name: Collect market data
+        env:
+          ENTSOE_TOKEN: ${{ secrets.ENTSOE_TOKEN }}
+        run: python scripts/collect.py
+
+      - name: Publish updated data
+        run: |
+          git config user.name "market-data-bot"
+          git config user.email "market-data-bot@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "Nothing changed."
+          else
+            git commit -m "Data update $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          fi

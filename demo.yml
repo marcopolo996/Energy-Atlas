@@ -1,0 +1,34 @@
+name: Load demo data
+
+# Manual only. Generates invented figures so the page can be checked before an
+# ENTSO-E token is available. Never runs on a schedule.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate demo data
+        run: python scripts/make_demo_data.py
+        working-directory: .
+        env:
+          PYTHONPATH: scripts
+      - name: Publish demo data
+        run: |
+          git config user.name "market-data-bot"
+          git config user.email "market-data-bot@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "Nothing changed."
+          else
+            git commit -m "Load demo data (invented figures)"
+            git push
+          fi
